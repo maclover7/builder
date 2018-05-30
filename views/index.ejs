@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<head>
+  <style>
+    .center {
+      text-align: center;
+    }
+  </style>
+
+  <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
+</head>
+
+<body>
+  <div class="container">
+    <h1 class="center">builder</h1>
+
+    <div class="row">
+      <div class="col-md-3">
+        <h3>Resources</h3>
+
+        <ul>
+          <li><a href="https://node-build-monitor.herokuapp.com/">Cluster Health</a></li>
+          <li><a href="https://nodejs-ci-health.mmarchini.me/">nodejs/node Health</a></li>
+        </ul>
+      </div>
+
+      <div class="col-md-9">
+        <button id="new-build-btn" class="btn btn-primary">New Build</button>
+        <button id="check-build-btn" class="btn btn-primary">Check Build</button>
+
+        <div id="check-build-form-container" style="display:none">
+          <form id="check-build-form" class="form">
+            <br>
+            <h5>Check Build</h5>
+
+            <div class="form-group">
+              <select class="custom-select form-control mb-3" id="jobType">
+                <option selected>Job Type</option>
+                <option value="node-test-pull-request">node-test-pull-request</option>
+                <option value="node-test-commit">node-test-commit</option>
+              </select>
+              <input type="jobId" id="jobId" class="form-control mb-3" aria-describedby="jobIdHelp" placeholder="Jenkins Job ID">
+              <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+          </form>
+        </div>
+
+        <div id="check-build-result" style="display:none">
+          <br>
+
+          <div id="check-build-result-card" class="card">
+            <div class="card-header text-white">
+              <span id="jobStatus"></span>: <span id="jobId"></span>
+              <br>
+              <span id="jobCommit"></span>
+            </div>
+
+            <div class="card-body">
+              <ul id="jobBuilds" class="list-group list-group-flush"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="http://code.jquery.com/jquery-3.3.1.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/js/bootstrap.min.js" integrity="sha384-smHYKdLADwkXOn1EmN1qk/HfnUcbVRZyYmZ4qpPea6sjB/pTJ0euyQp0Mk8ck+5T" crossorigin="anonymous"></script>
+
+  <script>
+    $(document).ready(() => {
+      const emptyResults = `
+        <br>
+        <div id="check-build-result-card" class="card">
+          <div class="card-header text-white">
+            <span id="jobStatus"></span>: <span id="jobId"></span>
+            <br>
+            <span id="jobCommit"></span>
+          </div>
+
+          <div class="card-body">
+            <ul id="jobBuilds" class="list-group list-group-flush"></ul>
+          </div>
+        </div>
+      `;
+
+      const getDataForJobId = (jobType, jobId) => {
+        $.ajax({
+          method: 'POST',
+          url: '/api/check',
+          data: JSON.stringify({ jobId, jobType }),
+          dataType: 'json',
+          contentType: "application/json"
+        })
+        .fail(() => {
+          alert('There was an error in processing your request. Please try again later.');
+        })
+        .done((json) => {
+          $('#check-build-form')[0].reset();
+          $('#check-build-form-container').hide();
+
+          $('#check-build-result span#jobId').html(`${json.jobType} #${json.jobId}`);
+          $('#check-build-result span#jobStatus').html(json.results.result);
+          $('#check-build-result span#jobCommit').html(`<code class="text-white">${json.results.commit}</code>`);
+
+          var backgroundClass = 'bg-info';
+          if (json.results.result === 'FAILURE') {
+            backgroundClass = 'bg-danger';
+          } else if (json.results.result === 'SUCCESS') {
+            backgroundClass = 'bg-success';
+          }
+          $('#check-build-result div#check-build-result-card').addClass(backgroundClass);
+
+          for(var key in json.results.builds) {
+            json.results.builds[key].forEach((build) => {
+              var count = 0;
+              var out = '';
+
+              var applicableFailures = json.results.failures
+              .filter((failure) => {
+                var jobName = build.jobName;
+                if (jobName === 'node-test-commit-windows-fanned') {
+                  jobName = 'node-test-binary-windows';
+                }
+
+                return failure && failure.reason && failure.url.startsWith(`https://ci.nodejs.org/job/${jobName}`);
+              });
+
+              applicableFailures.forEach((failure) => {
+                var failureId = `${build.jobName}-${failure.reason.substring(0, 20).replace(/\s/g, '-').replace(/\:/g, '-').replace(/\./g, '-')}`;
+                var shortReason = failure.reason.split("\n")[0];
+
+                if (shortReason.includes('Exception')) {
+                  shortReason = `${shortReason.split('Exception')[0]} Exception`;
+                }
+
+                out += `
+                <div id="accordion">
+                  <div class="card">
+                    <div class="card-header" id="heading-${failureId}">
+                      <h5 class="mb-0">
+                        <button class="btn btn-link" data-toggle="collapse" data-target="#collapse-${failureId}" aria-expanded="true" aria-controls="collapse-${failureId}">
+                          ${shortReason}
+                        </button>
+                      </h5>
+                    </div>
+
+                    <div id="collapse-${failureId}" class="collapse" aria-labelledby="heading-${failureId}" data-parent="#accordion">
+                      <div class="card-body">
+                        <a href="${failure.url}">Full stacktrace</a>
+                        <pre><code>${failure.reason}</code></pre>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                `;
+              });
+
+              $('#check-build-result ul#jobBuilds').append(`
+                <li class="card-text list-group-item"><b>${build.result}: ${build.jobName} (${applicableFailures.length})</b></li>
+                ${out}
+              `);
+            });
+          }
+
+          $('#check-build-result').show();
+        });
+      };
+
+      $('#new-build-btn').on('click', () => {
+      });
+
+      $('#check-build-btn').on('click', () => {
+        $('#check-build-result').html(emptyResults);
+        $('#check-build-result').hide();
+        $('#check-build-form-container').show();
+      });
+
+      $('#check-build-form').on('submit', (e) => {
+        e.preventDefault();
+        getDataForJobId(
+          $('#check-build-form select#jobType').val(),
+          $('#check-build-form input#jobId').val()
+        );
+      });
+    });
+  </script>
+</body>
