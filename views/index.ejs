@@ -27,18 +27,65 @@
         <button id="new-build-btn" class="btn btn-primary">New Build</button>
         <button id="check-build-btn" class="btn btn-primary">Check Build</button>
 
+        <div id="new-build-form-container" style="display:none">
+          <form id="new-build-form" class="form">
+            <br>
+            <h5>New Build</h5>
+
+            <div class="form-group form-check">
+              <input id="jobCertifySafe" type="checkbox" class="form-check-input" />
+              <label for="jobCertifySafe">Certify Safe</label>
+            </div>
+
+            <div class="form-group">
+              <label for="jobType">Job Type</label>
+              <select class="custom-select form-control" id="jobType">
+                <option selected></option>
+                <option value="node-test-pull-request">node-test-pull-request</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="jobOrg">GitHub Organization</label>
+              <input id="jobOrg" class="form-control" placeholder="nodejs">
+            </div>
+
+            <div class="form-group">
+              <label for="jobRepo">GitHub Organization</label>
+              <input id="jobRepo" class="form-control" placeholder="node">
+            </div>
+
+            <div class="form-group">
+              <label for="jobPR">GitHub Pull Request ID</label>
+              <input id="jobPR" class="form-control" placeholder="">
+            </div>
+
+            <div class="form-group">
+              <button type="submit" class="btn btn-primary">Submit</button>
+            </div>
+          </form>
+        </div>
+
         <div id="check-build-form-container" style="display:none">
           <form id="check-build-form" class="form">
             <br>
             <h5>Check Build</h5>
 
             <div class="form-group">
-              <select class="custom-select form-control mb-3" id="jobType">
-                <option selected>Job Type</option>
+              <label for="jobType">Job Type</label>
+              <select class="custom-select form-control" id="jobType">
+                <option selected></option>
                 <option value="node-test-pull-request">node-test-pull-request</option>
                 <option value="node-test-commit">node-test-commit</option>
               </select>
-              <input type="jobId" id="jobId" class="form-control mb-3" aria-describedby="jobIdHelp" placeholder="Jenkins Job ID">
+            </div>
+
+            <div class="form-group">
+              <label for="jobId">Jenkins Job ID</label>
+              <input id="jobId" class="form-control" placeholder="">
+            </div>
+
+            <div class="form-group">
               <button type="submit" class="btn btn-primary">Submit</button>
             </div>
           </form>
@@ -83,7 +130,54 @@
         </div>
       `;
 
-      const getDataForJobId = (jobType, jobId) => {
+      const createJob = (jobCertifySafe, jobType, jobOrg, jobRepo, jobPR) => {
+        if (!jobCertifySafe) {
+          alert('Must certify PR as safe');
+          return;
+        }
+
+        if (!jobType) {
+          alert('Please select a job type');
+          return;
+        }
+
+        if (!jobPR) {
+          alert('Please select a PR ID');
+          return;
+        }
+
+        // Defaults
+        if (!jobOrg) {
+          jobOrg = 'nodejs';
+        }
+
+        if (!jobRepo) {
+          jobRepo = 'node';
+        }
+
+        request.post({
+          uri: `https://ci.nodejs.org/job/${jobType}/buildWithParameters`,
+          form: {
+            TARGET_GITHUB_ORG: jobOrg,
+            TARGET_REPO_NAME: jobRepo,
+            PR_ID: jobPR,
+            POST_STATUST_TO_PR: true,
+            REBASE_ONTO: '<pr base branch>'
+          },
+          auth: {
+            username:,
+            password:
+          }
+        }, (a, b, c) => {
+          console.log(a);
+          console.log(b);
+          console.log(c);
+        })
+
+        console.log('args!');
+      };
+
+      const getJob = (jobType, jobId) => {
         $.ajax({
           method: 'POST',
           url: '/api/check',
@@ -167,9 +261,23 @@
       };
 
       $('#new-build-btn').on('click', () => {
+        $('#check-build-form-container').hide();
+        $('#new-build-form-container').show();
+      });
+
+      $('#new-build-form').on('submit', (e) => {
+        e.preventDefault();
+        createJob(
+          $('#new-build-form input#jobCertifySafe').prop('checked'),
+          $('#new-build-form select#jobType').val(),
+          $('#new-build-form input#jobOrg').val(),
+          $('#new-build-form input#jobRepo').val(),
+          $('#new-build-form input#jobPR').val()
+        );
       });
 
       $('#check-build-btn').on('click', () => {
+        $('#new-build-form-container').hide();
         $('#check-build-result').html(emptyResults);
         $('#check-build-result').hide();
         $('#check-build-form-container').show();
@@ -177,7 +285,7 @@
 
       $('#check-build-form').on('submit', (e) => {
         e.preventDefault();
-        getDataForJobId(
+        getJob(
           $('#check-build-form select#jobType').val(),
           $('#check-build-form input#jobId').val()
         );
