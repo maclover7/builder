@@ -172,6 +172,7 @@ class CommitBuild extends Job {
     const pending = allBuilds.filter(build => build.result === null);
     const unstable = allBuilds.filter(build => build.result === UNSTABLE);
 
+    //
     const params = actions.find(item => typeof item.parameters === 'object');
     params.parameters.forEach(pair => {
       this.params[pair.name] = pair.value;
@@ -492,9 +493,16 @@ class BenchmarkRun extends Job {
 
     this.results = '';
     this.significantResults = '';
+    this.params = {};
   }
 
   async getResults() {
+    const data = await this.getBuildData();
+    const params = data.actions.find(item => typeof item.parameters === 'object');
+    params.parameters.forEach(pair => {
+      this.params[pair.name] = pair.value;
+    });
+
     const { path } = this;
     const text = await this.getConsoleText();
     const index = text.indexOf('improvement');
@@ -506,7 +514,7 @@ class BenchmarkRun extends Job {
       .replace(/\nSending e-mails[\s\S]+/mg, '');
     this.results = results;
     this.significantResults = this.getSignificantResults(results);
-    return results;
+    return { results, params: this.params };
   }
 
   getSignificantResults(data) {

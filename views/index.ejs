@@ -122,11 +122,9 @@
           }
           $('#check-build-result div#check-build-result-card').addClass(backgroundClass);
 
-          if (typeof json.results === 'string') {
-            // benchmark-node-micro-benchmarks
+          if (json.jobType === 'benchmark-node-micro-benchmarks') {
             renderBenchmarkData(json.results);
           } else {
-            // node-test-pull-request OR node-test-commit
             renderTestData(json.results);
           }
 
@@ -135,8 +133,12 @@
       };
 
       const renderBenchmarkData = (results) => {
+        $('#check-build-result span#jobCommit').html(`
+          ${results.params.RUNS} runs of pull request ${results.params.PULL_ID} against ${results.params.BRANCH} branch
+        `);
+
         $('#check-build-result .card-body').html(`
-        <div class="card"><div class="card-body"><pre><code>${results}</code></pre></div></div>
+        <div class="card"><div class="card-body"><pre><code>${results.results}</code></pre></div></div>
         `);
       };
 
