@@ -209,7 +209,6 @@ class CommitBuild extends Job {
 
     // failure: { url, reason }
     const failures = this.failures = flatten(rawFailures);
-    console.log(this.change);
     return { result, failures, builds, commit: this.commit };
   }
 
@@ -530,6 +529,8 @@ const getCIBuildResults = (jobType, jobId, request) => {
     build = new PRBuild(request, jobId);
   } else if (jobType === 'node-test-commit') {
     build = new CommitBuild(request, jobId);
+  } else if (jobType === 'benchmark-node-micro-benchmarks') {
+    build = new BenchmarkRun(request, jobId);
   }
 
   return build.getResults();

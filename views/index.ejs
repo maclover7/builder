@@ -1,11 +1,9 @@
 <!DOCTYPE html>
 <head>
+  <title>builder</title>
   <style>
-    .center {
-      text-align: center;
-    }
+    .center { text-align: center; }
   </style>
-
   <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-WskhaSGFgHYWDcbwN70/dfYBj47jz9qbsMId/iRN3ewGhXQFZCSftd1LZCfmhktB" crossorigin="anonymous">
 </head>
 
@@ -16,7 +14,6 @@
     <div class="row">
       <div class="col-md-3">
         <h3>Resources</h3>
-
         <ul>
           <li><a href="https://node-build-monitor.herokuapp.com/">Cluster Health</a></li>
           <li><a href="https://nodejs-ci-health.mmarchini.me/">nodejs/node Health</a></li>
@@ -24,9 +21,15 @@
       </div>
 
       <div class="col-md-9">
-        <button id="new-build-btn" class="btn btn-primary">New Build</button>
+        <a target="_blank" href="https://ci.nodejs.org/job/node-test-pull-request/build">
+          <button id="new-build-btn" class="btn btn-primary">New Build</button>
+        </a>
         <button id="check-build-btn" class="btn btn-primary">Check Build</button>
+      </div>
+    </div>
 
+    <div class="row">
+      <div class="col-md-12">
         <div id="check-build-form-container" style="display:none">
           <form id="check-build-form" class="form">
             <br>
@@ -37,6 +40,7 @@
                 <option selected>Job Type</option>
                 <option value="node-test-pull-request">node-test-pull-request</option>
                 <option value="node-test-commit">node-test-commit</option>
+                <option value="benchmark-node-micro-benchmarks">benchmark-node-micro-benchmarks</option>
               </select>
               <input type="jobId" id="jobId" class="form-control mb-3" aria-describedby="jobIdHelp" placeholder="Jenkins Job ID">
               <button type="submit" class="btn btn-primary">Submit</button>
@@ -99,8 +103,16 @@
           $('#check-build-form-container').hide();
 
           $('#check-build-result span#jobId').html(`${json.jobType} #${json.jobId}`);
-          $('#check-build-result span#jobStatus').html(json.results.result);
-          $('#check-build-result span#jobCommit').html(`<code class="text-white">${json.results.commit}</code>`);
+
+          if (json.results.result) {
+            $('#check-build-result span#jobStatus').html(json.results.result);
+          } else {
+            $('#check-build-result span#jobStatus').html('RAN');
+          }
+
+          if (json.results.commit) {
+            $('#check-build-result span#jobCommit').html(`<code class="text-white">${json.results.commit}</code>`);
+          }
 
           var backgroundClass = 'bg-info';
           if (json.results.result === 'FAILURE') {
@@ -110,64 +122,77 @@
           }
           $('#check-build-result div#check-build-result-card').addClass(backgroundClass);
 
-          for(var key in json.results.builds) {
-            json.results.builds[key].forEach((build) => {
-              var count = 0;
-              var out = '';
-
-              var applicableFailures = json.results.failures
-              .filter((failure) => {
-                var jobName = build.jobName;
-                if (jobName === 'node-test-commit-windows-fanned') {
-                  jobName = 'node-test-binary-windows';
-                }
-
-                return failure && failure.reason && failure.url.startsWith(`https://ci.nodejs.org/job/${jobName}`);
-              });
-
-              applicableFailures.forEach((failure) => {
-                var failureId = `${build.jobName}-${failure.reason.substring(0, 20).replace(/\s/g, '-').replace(/\:/g, '-').replace(/\./g, '-')}`;
-                var shortReason = failure.reason.split("\n")[0];
-
-                if (shortReason.includes('Exception')) {
-                  shortReason = `${shortReason.split('Exception')[0]} Exception`;
-                }
-
-                out += `
-                <div id="accordion">
-                  <div class="card">
-                    <div class="card-header" id="heading-${failureId}">
-                      <h5 class="mb-0">
-                        <button class="btn btn-link" data-toggle="collapse" data-target="#collapse-${failureId}" aria-expanded="true" aria-controls="collapse-${failureId}">
-                          ${shortReason}
-                        </button>
-                      </h5>
-                    </div>
-
-                    <div id="collapse-${failureId}" class="collapse" aria-labelledby="heading-${failureId}" data-parent="#accordion">
-                      <div class="card-body">
-                        <a href="${failure.url}">Full stacktrace</a>
-                        <pre><code>${failure.reason}</code></pre>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                `;
-              });
-
-              $('#check-build-result ul#jobBuilds').append(`
-                <li class="card-text list-group-item"><b>${build.result}: ${build.jobName} (${applicableFailures.length})</b></li>
-                ${out}
-              `);
-            });
+          if (typeof json.results === 'string') {
+            // benchmark-node-micro-benchmarks
+            renderBenchmarkData(json.results);
+          } else {
+            // node-test-pull-request OR node-test-commit
+            renderTestData(json.results);
           }
 
           $('#check-build-result').show();
         });
       };
 
-      $('#new-build-btn').on('click', () => {
-      });
+      const renderBenchmarkData = (results) => {
+        $('#check-build-result .card-body').html(`
+        <div class="card"><div class="card-body"><pre><code>${results}</code></pre></div></div>
+        `);
+      };
+
+      const renderTestData = (results) => {
+        for(var key in results.builds) {
+          results.builds[key].forEach((build) => {
+            var count = 0;
+            var out = '';
+
+            var applicableFailures = results.failures
+            .filter((failure) => {
+              var { jobName } = build;
+              if (jobName === 'node-test-commit-windows-fanned') {
+                jobName = 'node-test-binary-windows';
+              }
+
+              return failure && failure.reason && failure.url.startsWith(`https://ci.nodejs.org/job/${jobName}`);
+            });
+
+            applicableFailures.forEach((failure) => {
+              var failureId = `${build.jobName}-${failure.reason.substring(0, 20).replace(/\s/g, '-').replace(/\:/g, '-').replace(/\./g, '-')}`;
+              var shortReason = failure.reason.split("\n")[0];
+
+              if (shortReason.includes('Exception')) {
+                shortReason = `${shortReason.split('Exception')[0]} Exception`;
+              }
+
+              out += `
+              <div id="accordion">
+                <div class="card">
+                  <div class="card-header" id="heading-${failureId}">
+                    <h5 class="mb-0">
+                      <button class="btn btn-link" data-toggle="collapse" data-target="#collapse-${failureId}" aria-expanded="true" aria-controls="collapse-${failureId}">
+                        ${shortReason}
+                      </button>
+                    </h5>
+                  </div>
+
+                  <div id="collapse-${failureId}" class="collapse" aria-labelledby="heading-${failureId}" data-parent="#accordion">
+                    <div class="card-body">
+                      <a href="${failure.url}">Full stacktrace</a>
+                      <pre><code>${failure.reason}</code></pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              `;
+            });
+
+            $('#check-build-result ul#jobBuilds').append(`
+              <li class="card-text list-group-item"><b>${build.result}: ${build.jobName} (${applicableFailures.length})</b></li>
+              ${out}
+            `);
+          });
+        }
+      };
 
       $('#check-build-btn').on('click', () => {
         $('#check-build-result').html(emptyResults);
